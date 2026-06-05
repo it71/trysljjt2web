@@ -1,0 +1,6 @@
+/workspace/.godot/mono/temp/obj/Debug/WebOverlay.csproj.AssemblyReference.cache
+/workspace/.godot/mono/temp/obj/Debug/WebOverlay.GeneratedMSBuildEditorConfig.editorconfig
+/workspace/.godot/mono/temp/obj/Debug/WebOverlay.AssemblyInfoInputs.cache
+/workspace/.godot/mono/temp/obj/Debug/WebOverlay.AssemblyInfo.cs
+/workspace/.godot/mono/temp/obj/Debug/WebOverlay.csproj.CoreCompileInputs.cache
+/workspace/.godot/mono/temp/obj/Debug/WebOverlay.sourcelink.json

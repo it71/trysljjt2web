@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "dgSpecHash": "Lwvc9JfFahnEACuR5A3TuHo3HvELglj0ps94z2WQb82/ZUiOo7xy55ApsVEQ326jFrrvlb5h5/XAp8pgV4KfAg==",
+  "success": true,
+  "projectFilePath": "/workspace/WebOverlay.csproj",
+  "expectedPackageFiles": [
+    "/root/.nuget/packages/godot.sourcegenerators/4.5.1/godot.sourcegenerators.4.5.1.nupkg.sha512",
+    "/root/.nuget/packages/godotsharp/4.5.1/godotsharp.4.5.1.nupkg.sha512",
+    "/root/.nuget/packages/godotsharpeditor/4.5.1/godotsharpeditor.4.5.1.nupkg.sha512"
+  ],
+  "logs": []
+}
