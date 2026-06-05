@@ -1,0 +1,14 @@
+<Project Sdk="Godot.NET.Sdk/4.5.1">
+  <PropertyGroup>
+    <TargetFramework>net9.0-windows10.0.17763.0</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>true</ImplicitUsings>
+    <LangVersion>13</LangVersion>
+    <Sts2Dir>F:\Steam\steamapps\common\Slay the Spire 2</Sts2Dir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="GodotSharp" HintPath="$(Sts2Dir)\data_sts2_windows_x86_64\GodotSharp.dll" Private="false" />
+    <Reference Include="sts2" HintPath="$(Sts2Dir)\data_sts2_windows_x86_64\sts2.dll" Private="false" />
+    <Reference Include="0Harmony" HintPath="$(Sts2Dir)\data_sts2_windows_x86_64\0Harmony.dll" Private="false" />
+  </ItemGroup>
+</Project>
