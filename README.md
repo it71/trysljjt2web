@@ -14,10 +14,58 @@
 - **快捷站点** - 预设常用网站快速访问
 - **跨平台** - 支持 Windows、Linux 和 macOS
 
+## 编译说明
+
+### 前置要求
+- [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- Slay the Spire 2 游戏（版本 0.105.0 或更高）
+
+### 编译步骤
+
+1. **克隆或下载项目**
+   ```bash
+   git clone https://github.com/it71/trysljjt2web.git
+   cd trysljjt2web
+   ```
+
+2. **设置游戏目录路径**
+   
+   编辑 `WebOverlay.csproj` 文件，将 `Sts2Dir` 设置为你的 Slay the Spire 2 游戏安装目录：
+   ```xml
+   <Sts2Dir Condition="'$(Sts2Dir)' == ''">C:\Path\To\SlayTheSpire2</Sts2Dir>
+   ```
+   
+   或者在编译时通过命令行参数指定：
+   ```bash
+   dotnet build -p:Sts2Dir="C:\Path\To\SlayTheSpire2"
+   ```
+
+3. **编译项目**
+   ```bash
+   dotnet build -c Release
+   ```
+
+4. **获取编译输出**
+   
+   编译成功后，DLL 文件将生成在 `bin/Release/net8.0/` 目录中。
+
+### 项目依赖
+
+项目依赖以下游戏 DLL 文件（位于游戏安装目录的 `data_sts2_<平台>/` 文件夹中）：
+- `GodotSharp.dll`
+- `sts2.dll`
+- `0Harmony.dll`
+
 ## 安装说明
 
+### 使用预编译版本
 1. 下载最新版本的插件
 2. 将插件文件放置在游戏的 mod 目录中
+3. 在游戏中启用插件
+
+### 使用自行编译版本
+1. 按照上述编译说明编译项目
+2. 将编译生成的 DLL 文件和 `WebOverlay.json` 放置在游戏的 mod 目录中
 3. 在游戏中启用插件
 
 ## 使用指南
@@ -44,7 +92,8 @@
 ## 系统要求
 
 - 游戏版本：0.105.0 或更高
-- 支持平台：Windows、Linux、macOS
+- 支持平台：Windows、Linux 和 macOS
+- 编译环境：.NET 8.0 SDK
 
 ## 版本历史
 
@@ -54,6 +103,7 @@
 - 实现响应式布局和动态调整功能
 - 增强的异常处理和日志系统
 - 优化收藏夹管理体验
+- 更新项目配置，支持灵活的游戏目录路径设置
 
 ## 作者
 
