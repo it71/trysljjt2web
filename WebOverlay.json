@@ -1,9 +1,9 @@
 {
   "id": "WebOverlay",
-  "name": "WebOverlay",
+  "name": "CE Web Browser",
   "author": "铁柱",
-  "description": "悬浮浏览器 v4.1\n跨平台 | 收藏夹 | CE记忆 | 拖拽 | 调整大小 | 透明度 | 快捷站点 | 错误恢复",
-  "version": "4.1.0",
+  "description": "🚀 内置游戏浏览器 v5.0\n跨平台 | 完整浏览器UI | 导航历史 | 收藏夹管理 | 响应式布局 | 拖拽/调整大小 | 透明度调节 | 外部浏览器回退",
+  "version": "5.0.0",
   "min_game_version": "0.105.0",
   "has_pck": false,
   "has_dll": true,
