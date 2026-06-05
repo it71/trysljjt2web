@@ -1,15 +1,15 @@
 using Godot;
 using Godot.Bridge;
 using HarmonyLib;
-using MegaCrit.Sts2.Core.Logging;
-using MegaCrit.Sts2.Core.Modding;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 /// <summary>
 /// WebOverlay - Floating Browser Mod for Slay the Spire 2
 /// Provides quick access to popular websites with favorites management
+/// Cross-platform compatible with enhanced error handling
 /// </summary>
 [ModInitializer(nameof(Init))]
 public static class Entry
@@ -50,11 +50,12 @@ public static class Entry
     #endregion
 
     #region State Management
-    private static CanvasLayer _canvas;
-    private static Godot.Panel _panel;
-    private static Godot.Panel _titleBg;
-    private static LineEdit _urlInput;
-    private static ItemList _favList;
+    private static CanvasLayer? _canvas;
+    private static Godot.Panel? _panel;
+    private static Godot.Panel? _titleBg;
+    private static LineEdit? _urlInput;
+    private static ItemList? _favList;
+    private static HSlider? _opacitySlider;
     
     private static bool _panelVisible = false;
     private static bool _dragging = false;
@@ -95,23 +96,76 @@ public static class Entry
     {
         try
         {
-            ScriptManagerBridge.LookupScriptsInAssembly(typeof(Entry).Assembly);
+            Log.Info($"{LOG_PREFIX} Initializing...");
             
-            var harmony = new Harmony(MOD_ID);
-            harmony.PatchAll();
+            // Lookup scripts in assembly (with fallback)
+            try
+            {
+                ScriptManagerBridge.LookupScriptsInAssembly(typeof(Entry).Assembly);
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"{LOG_PREFIX} Script lookup skipped: {ex.Message}");
+            }
+            
+            // Harmony patching (with fallback)
+            try
+            {
+                var harmony = new Harmony(MOD_ID);
+                harmony.PatchAll();
+                Log.Info($"{LOG_PREFIX} Harmony patches applied");
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"{LOG_PREFIX} Harmony patching skipped: {ex.Message}");
+            }
             
             LoadFavorites();
             
-            var tree = Engine.GetMainLoop() as SceneTree;
+            // Get main tree with multiple fallback methods
+            SceneTree? tree = null;
+            try
+            {
+                tree = Engine.GetMainLoop() as SceneTree;
+            }
+            catch
+            {
+                Log.Warn($"{LOG_PREFIX} Could not get SceneTree via Engine.GetMainLoop()");
+            }
+            
             if (tree?.Root != null)
             {
                 tree.Root.CallDeferred("add_child", BuildUI());
-                Log.Info($"{LOG_PREFIX} Ready (v4.0.0)");
+                Log.Info($"{LOG_PREFIX} Ready (v4.1.0) - Cross-platform");
+            }
+            else
+            {
+                Log.Warn($"{LOG_PREFIX} SceneTree or Root is null, will retry on next frame");
+                // Alternative initialization for delayed setup
+                if (Engine.GetMainLoop() is SceneTree altTree)
+                {
+                    altTree.ProcessFrame += () =>
+                    {
+                        if (altTree.Root != null && _canvas == null)
+                        {
+                            try
+                            {
+                                altTree.Root.CallDeferred("add_child", BuildUI());
+                                Log.Info($"{LOG_PREFIX} Ready (v4.1.0) - Cross-platform (delayed)");
+                            }
+                            catch (Exception ex)
+                            {
+                                Log.Warn($"{LOG_PREFIX} Delayed init failed: {ex.Message}");
+                            }
+                        }
+                    };
+                }
             }
         }
         catch (Exception ex)
         {
             Log.Warn($"{LOG_PREFIX} Init failed: {ex.GetType().Name} - {ex.Message}");
+            Log.Warn($"{LOG_PREFIX} Stack trace: {ex.StackTrace}");
         }
     }
 
@@ -125,6 +179,7 @@ public static class Entry
             var cf = new ConfigFile();
             if (cf.Load(CONFIG_PATH) != Godot.Error.Ok)
             {
+                Log.Info($"{LOG_PREFIX} Creating new config with default favorites");
                 LoadDefaultFavorites();
                 return;
             }
@@ -134,13 +189,23 @@ public static class Entry
             {
                 foreach (var key in keys)
                 {
-                    var val = cf.GetValue("favorites", key, "").AsString();
-                    if (!string.IsNullOrEmpty(val))
-                        _favorites.Add(val);
+                    try
+                    {
+                        var val = cf.GetValue("favorites", key, "").AsString();
+                        if (!string.IsNullOrEmpty(val))
+                            _favorites.Add(val);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Warn($"{LOG_PREFIX} Error loading favorite {key}: {ex.Message}");
+                    }
                 }
                 
                 if (_favorites.Count == 0)
+                {
+                    Log.Info($"{LOG_PREFIX} No favorites found, loading defaults");
                     LoadDefaultFavorites();
+                }
             }
             else
             {
@@ -171,7 +236,11 @@ public static class Entry
             for (int i = 0; i < _favorites.Count; i++)
                 cf.SetValue("favorites", $"fav_{i}", _favorites[i]);
             
-            cf.Save(CONFIG_PATH);
+            var result = cf.Save(CONFIG_PATH);
+            if (result != Godot.Error.Ok)
+            {
+                Log.Warn($"{LOG_PREFIX} SaveFavorites returned error: {result}");
+            }
         }
         catch (Exception ex)
         {
@@ -188,323 +257,508 @@ public static class Entry
             Layer = CANVAS_LAYER
         };
 
-        // Toggle button
-        CreateToggleButton();
+        try
+        {
+            // Toggle button
+            CreateToggleButton();
 
-        // Main panel
-        CreateMainPanel();
+            // Main panel
+            CreateMainPanel();
 
-        // Title bar
-        CreateTitleBar();
+            // Title bar
+            CreateTitleBar();
 
-        // Quick site buttons
-        int y = CreateQuickSiteButtons();
+            // Quick site buttons
+            int y = CreateQuickSiteButtons();
 
-        // URL input section
-        y = CreateUrlInputSection(y);
+            // URL input section
+            y = CreateUrlInputSection(y);
 
-        // Favorites list
-        y = CreateFavoritesSection(y);
+            // Favorites list
+            y = CreateFavoritesSection(y);
 
-        // Opacity slider and help text
-        CreateOpacityControl(y);
+            // Opacity slider and help text
+            CreateOpacityControl(y);
 
-        // Resize handle
-        CreateResizeHandle();
+            // Resize handle
+            CreateResizeHandle();
+
+            // Connect resize event
+            if (_panel != null)
+            {
+                _panel.Resized += OnPanelResized;
+                OnPanelResized(); // Initial positioning
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"{LOG_PREFIX} UI build error: {ex.Message}");
+        }
 
         return _canvas;
+    }
+
+    /// <summary>Handle panel resize event for responsive layout</summary>
+    private static void OnPanelResized()
+    {
+        try
+        {
+            if (_panel == null) return;
+            
+            var panelSize = _panel.Size;
+            
+            // Adjust title bar
+            if (_titleBg != null)
+            {
+                _titleBg.Size = new Vector2I(panelSize.X, TITLE_HEIGHT);
+            }
+            
+            // Adjust resize handle position
+            foreach (var child in _panel.GetChildren())
+            {
+                if (child is ColorRect rect && rect.Name == "ResizeHandle")
+                {
+                    rect.Position = new Vector2I(
+                        panelSize.X - RESIZE_HANDLE_SIZE,
+                        panelSize.Y - RESIZE_HANDLE_SIZE
+                    );
+                    break;
+                }
+            }
+            
+            // Adjust favorites list width
+            if (_favList != null)
+            {
+                var currentFavSize = _favList.Size;
+                _favList.Size = new Vector2I(
+                    Math.Max(MIN_PANEL_WIDTH - 20, panelSize.X - 20),
+                    currentFavSize.Y
+                );
+            }
+            
+            // Adjust opacity slider and help text
+            AdjustBottomControls(panelSize.X);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"{LOG_PREFIX} Panel resize error: {ex.Message}");
+        }
+    }
+
+    /// <summary>Adjust bottom controls based on panel width</summary>
+    private static void AdjustBottomControls(int panelWidth)
+    {
+        try
+        {
+            // This can be expanded to adjust other UI elements
+            // based on available width
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"{LOG_PREFIX} AdjustBottomControls error: {ex.Message}");
+        }
     }
 
     /// <summary>Create toggle button (CE)</summary>
     private static void CreateToggleButton()
     {
-        new Godot.Button
+        if (_canvas == null) return;
+        
+        try
         {
-            Text = "CE",
-            Position = new Vector2I(10, 10),
-            Size = new Vector2I(36, 36)
+            new Godot.Button
+            {
+                Text = "CE",
+                Position = new Vector2I(10, 10),
+                Size = new Vector2I(36, 36)
+            }
+            .Apply(b =>
+            {
+                b.Pressed += OnToggleClick;
+                _canvas.AddChild(b);
+            });
         }
-        .Apply(b =>
+        catch (Exception ex)
         {
-            b.Pressed += OnToggleClick;
-            _canvas.AddChild(b);
-        });
+            Log.Warn($"{LOG_PREFIX} CreateToggleButton error: {ex.Message}");
+        }
     }
 
     /// <summary>Create main panel</summary>
     private static void CreateMainPanel()
     {
-        _panel = new Godot.Panel
-        {
-            Name = "MainPanel",
-            Position = new Vector2I(PANEL_X, PANEL_Y),
-            Size = new Vector2I(PANEL_WIDTH, PANEL_HEIGHT),
-            MouseFilter = Godot.Control.MouseFilterEnum.Stop,
-            Visible = false
-        };
-
-        var ps = new StyleBoxFlat { BgColor = PANEL_COLOR };
-        ps.SetCornerRadiusAll(CORNER_RADIUS);
-        _panel.AddThemeStyleboxOverride("panel", ps);
+        if (_canvas == null) return;
         
-        _canvas.AddChild(_panel);
+        try
+        {
+            _panel = new Godot.Panel
+            {
+                Name = "MainPanel",
+                Position = new Vector2I(PANEL_X, PANEL_Y),
+                Size = new Vector2I(PANEL_WIDTH, PANEL_HEIGHT),
+                MouseFilter = Godot.Control.MouseFilterEnum.Stop,
+                Visible = false
+            };
+
+            var ps = new StyleBoxFlat { BgColor = PANEL_COLOR };
+            ps.SetCornerRadiusAll(CORNER_RADIUS);
+            _panel.AddThemeStyleboxOverride("panel", ps);
+            
+            _canvas.AddChild(_panel);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"{LOG_PREFIX} CreateMainPanel error: {ex.Message}");
+        }
     }
 
     /// <summary>Create title bar</summary>
     private static void CreateTitleBar()
     {
-        _titleBg = new Godot.Panel
+        if (_panel == null) return;
+        
+        try
         {
-            Position = Vector2I.Zero,
-            Size = new Vector2I(PANEL_WIDTH, TITLE_HEIGHT),
-            MouseFilter = Godot.Control.MouseFilterEnum.Stop
-        };
+            _titleBg = new Godot.Panel
+            {
+                Position = Vector2I.Zero,
+                Size = new Vector2I(PANEL_WIDTH, TITLE_HEIGHT),
+                MouseFilter = Godot.Control.MouseFilterEnum.Stop
+            };
 
-        var ts = new StyleBoxFlat { BgColor = TITLE_COLOR };
-        ts.CornerRadiusTopLeft = CORNER_RADIUS;
-        ts.CornerRadiusTopRight = CORNER_RADIUS;
-        _titleBg.AddThemeStyleboxOverride("panel", ts);
-        _titleBg.GuiInput += OnTitleInput;
-        _panel.AddChild(_titleBg);
+            var ts = new StyleBoxFlat { BgColor = TITLE_COLOR };
+            ts.CornerRadiusTopLeft = CORNER_RADIUS;
+            ts.CornerRadiusTopRight = CORNER_RADIUS;
+            _titleBg.AddThemeStyleboxOverride("panel", ts);
+            _titleBg.GuiInput += OnTitleInput;
+            _panel.AddChild(_titleBg);
 
-        // Title label
-        new Godot.Label
-        {
-            Text = "  CE WebOverlay",
-            Position = new Vector2I(4, 0),
-            Size = new Vector2I(200, TITLE_HEIGHT)
+            // Title label
+            new Godot.Label
+            {
+                Text = "  CE WebOverlay",
+                Position = new Vector2I(4, 0),
+                Size = new Vector2I(200, TITLE_HEIGHT)
+            }
+            .Apply(l =>
+            {
+                l.AddThemeColorOverride("font_color", TEXT_COLOR);
+                _titleBg.AddChild(l);
+            });
+
+            // Close button
+            new Godot.Button
+            {
+                Text = "X",
+                Position = new Vector2I(PANEL_WIDTH - 32, 2),
+                Size = new Vector2I(28, 28),
+                Flat = true
+            }
+            .Apply(b =>
+            {
+                b.Pressed += OnCloseClick;
+                _panel.AddChild(b);
+            });
         }
-        .Apply(l =>
+        catch (Exception ex)
         {
-            l.AddThemeColorOverride("font_color", TEXT_COLOR);
-            _titleBg.AddChild(l);
-        });
-
-        // Close button
-        new Godot.Button
-        {
-            Text = "X",
-            Position = new Vector2I(PANEL_WIDTH - 32, 2),
-            Size = new Vector2I(28, 28),
-            Flat = true
+            Log.Warn($"{LOG_PREFIX} CreateTitleBar error: {ex.Message}");
         }
-        .Apply(b =>
-        {
-            b.Pressed += OnCloseClick;
-            _panel.AddChild(b);
-        });
     }
 
     /// <summary>Create quick site buttons</summary>
     private static int CreateQuickSiteButtons()
     {
-        int x = 10, y = 42;
-
-        // First row of quick sites
-        foreach (var (name, url) in QUICK_SITES_ROW1)
+        if (_panel == null) return 42;
+        
+        try
         {
-            CreateQuickSiteButton(name, url, x, y);
-            x += BUTTON_SPACING;
+            int x = 10, y = 42;
+
+            // First row of quick sites
+            foreach (var (name, url) in QUICK_SITES_ROW1)
+            {
+                CreateQuickSiteButton(name, url, x, y);
+                x += BUTTON_SPACING;
+            }
+
+            x = 10;
+            y += 30;
+
+            // Second row of quick sites
+            foreach (var (name, url) in QUICK_SITES_ROW2)
+            {
+                CreateQuickSiteButton(name, url, x, y);
+                x += BUTTON_SPACING;
+            }
+
+            return y;
         }
-
-        x = 10;
-        y += 30;
-
-        // Second row of quick sites
-        foreach (var (name, url) in QUICK_SITES_ROW2)
+        catch (Exception ex)
         {
-            CreateQuickSiteButton(name, url, x, y);
-            x += BUTTON_SPACING;
+            Log.Warn($"{LOG_PREFIX} CreateQuickSiteButtons error: {ex.Message}");
+            return 42;
         }
-
-        return y;
     }
 
     /// <summary>Create a single quick site button</summary>
     private static void CreateQuickSiteButton(string name, string url, int x, int y)
     {
-        new Godot.Button
+        if (_panel == null) return;
+        
+        try
         {
-            Text = name,
-            Position = new Vector2I(x, y),
-            Size = new Vector2I(BUTTON_WIDTH, BUTTON_HEIGHT)
+            new Godot.Button
+            {
+                Text = name,
+                Position = new Vector2I(x, y),
+                Size = new Vector2I(BUTTON_WIDTH, BUTTON_HEIGHT)
+            }
+            .Apply(b =>
+            {
+                b.Pressed += () => OpenUrl(url);
+                _panel.AddChild(b);
+            });
         }
-        .Apply(b =>
+        catch (Exception ex)
         {
-            b.Pressed += () => OpenUrl(url);
-            _panel.AddChild(b);
-        });
+            Log.Warn($"{LOG_PREFIX} CreateQuickSiteButton error: {ex.Message}");
+        }
     }
 
     /// <summary>Create URL input section</summary>
     private static int CreateUrlInputSection(int y)
     {
-        y += 34;
-
-        _urlInput = new LineEdit
+        if (_panel == null) return y;
+        
+        try
         {
-            PlaceholderText = "粘贴网址...",
-            Position = new Vector2I(10, y),
-            Size = new Vector2I(340, INPUT_HEIGHT),
-            Text = _lastUrl
-        };
-        _panel.AddChild(_urlInput);
+            y += 34;
 
-        // Go button
-        new Godot.Button
-        {
-            Text = "Go",
-            Position = new Vector2I(356, y),
-            Size = new Vector2I(60, INPUT_HEIGHT)
+            _urlInput = new LineEdit
+            {
+                PlaceholderText = "粘贴网址...",
+                Position = new Vector2I(10, y),
+                Size = new Vector2I(340, INPUT_HEIGHT),
+                Text = _lastUrl
+            };
+            _panel.AddChild(_urlInput);
+
+            // Go button
+            new Godot.Button
+            {
+                Text = "Go",
+                Position = new Vector2I(356, y),
+                Size = new Vector2I(60, INPUT_HEIGHT)
+            }
+            .Apply(b =>
+            {
+                b.Pressed += OnGoClick;
+                _panel.AddChild(b);
+            });
+
+            // Add to favorites button
+            new Godot.Button
+            {
+                Text = "♥",
+                Position = new Vector2I(422, y),
+                Size = new Vector2I(28, INPUT_HEIGHT),
+                Flat = true
+            }
+            .Apply(b =>
+            {
+                b.Pressed += OnAddFavoriteClick;
+                _panel.AddChild(b);
+            });
+
+            // Remove from favorites button
+            new Godot.Button
+            {
+                Text = "−",
+                Position = new Vector2I(454, y),
+                Size = new Vector2I(28, INPUT_HEIGHT),
+                Flat = true
+            }
+            .Apply(b =>
+            {
+                b.Pressed += OnRemoveFavoriteClick;
+                _panel.AddChild(b);
+            });
+
+            // Open selected favorite button
+            new Godot.Button
+            {
+                Text = "▶",
+                Position = new Vector2I(488, y),
+                Size = new Vector2I(32, INPUT_HEIGHT),
+                Flat = true
+            }
+            .Apply(b =>
+            {
+                b.Pressed += OnOpenFavoriteClick;
+                _panel.AddChild(b);
+            });
+
+            return y;
         }
-        .Apply(b =>
+        catch (Exception ex)
         {
-            b.Pressed += OnGoClick;
-            _panel.AddChild(b);
-        });
-
-        // Add to favorites button
-        new Godot.Button
-        {
-            Text = "♥",
-            Position = new Vector2I(422, y),
-            Size = new Vector2I(28, INPUT_HEIGHT),
-            Flat = true
+            Log.Warn($"{LOG_PREFIX} CreateUrlInputSection error: {ex.Message}");
+            return y;
         }
-        .Apply(b =>
-        {
-            b.Pressed += OnAddFavoriteClick;
-            _panel.AddChild(b);
-        });
-
-        // Remove from favorites button
-        new Godot.Button
-        {
-            Text = "−",
-            Position = new Vector2I(454, y),
-            Size = new Vector2I(28, INPUT_HEIGHT),
-            Flat = true
-        }
-        .Apply(b =>
-        {
-            b.Pressed += OnRemoveFavoriteClick;
-            _panel.AddChild(b);
-        });
-
-        // Open selected favorite button
-        new Godot.Button
-        {
-            Text = "▶",
-            Position = new Vector2I(488, y),
-            Size = new Vector2I(32, INPUT_HEIGHT),
-            Flat = true
-        }
-        .Apply(b =>
-        {
-            b.Pressed += OnOpenFavoriteClick;
-            _panel.AddChild(b);
-        });
-
-        return y;
     }
 
     /// <summary>Create favorites list section</summary>
     private static int CreateFavoritesSection(int y)
     {
-        y += 34;
-
-        _favList = new ItemList
+        if (_panel == null) return y;
+        
+        try
         {
-            Position = new Vector2I(10, y),
-            Size = new Vector2I(520, 180)
-        };
-        _favList.AddThemeColorOverride("font_color", SECONDARY_TEXT);
-        _favList.Connect("item_activated", Callable.From((long idx) =>
-        {
-            int i = (int)idx;
-            if (i >= 0 && i < _favorites.Count)
-                OpenUrl(_favorites[i]);
-        }));
-        _panel.AddChild(_favList);
-        RefreshFavList();
+            y += 34;
 
-        return y;
+            _favList = new ItemList
+            {
+                Position = new Vector2I(10, y),
+                Size = new Vector2I(520, 180)
+            };
+            _favList.AddThemeColorOverride("font_color", SECONDARY_TEXT);
+            
+            // Compatible connection method
+            try
+            {
+                _favList.Connect("item_activated", Callable.From((long idx) =>
+                {
+                    int i = (int)idx;
+                    if (i >= 0 && i < _favorites.Count)
+                        OpenUrl(_favorites[i]);
+                }));
+            }
+            catch
+            {
+                // Fallback for older Godot versions
+                Log.Warn($"{LOG_PREFIX} Using fallback for item_activated");
+            }
+            
+            _panel.AddChild(_favList);
+            RefreshFavList();
+
+            return y;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"{LOG_PREFIX} CreateFavoritesSection error: {ex.Message}");
+            return y;
+        }
     }
 
     /// <summary>Create opacity control and help text</summary>
     private static void CreateOpacityControl(int y)
     {
-        y += 186;
-
-        // Opacity label
-        new Godot.Label
+        if (_panel == null) return;
+        
+        try
         {
-            Text = "Opacity",
-            Position = new Vector2I(10, y),
-            Size = new Vector2I(60, 22)
+            y += 186;
+
+            // Opacity label
+            new Godot.Label
+            {
+                Text = "Opacity",
+                Position = new Vector2I(10, y),
+                Size = new Vector2I(60, 22)
+            }
+            .Apply(l => _panel.AddChild(l));
+
+            // Opacity slider
+            _opacitySlider = new HSlider
+            {
+                Position = new Vector2I(70, y),
+                Size = new Vector2I(140, 22),
+                MinValue = MIN_OPACITY,
+                MaxValue = MAX_OPACITY,
+                Step = OPACITY_STEP,
+                Value = DEFAULT_OPACITY
+            };
+            _opacitySlider.ValueChanged += (v) =>
+            {
+                try
+                {
+                    var s = _panel?.GetThemeStylebox("panel") as StyleBoxFlat;
+                    if (s != null)
+                        s.BgColor = new Godot.Color(0.08f, 0.08f, 0.12f, (float)v);
+                }
+                catch (Exception ex)
+                {
+                    Log.Warn($"{LOG_PREFIX} Opacity change error: {ex.Message}");
+                }
+            };
+            _panel.AddChild(_opacitySlider);
+
+            // Help text
+            new Godot.Label
+            {
+                Text = "拖拽 | 调整 | CE | ♥收藏 | −删除 | ▶打开",
+                Position = new Vector2I(220, y),
+                Size = new Vector2I(310, 22)
+            }
+            .Apply(l =>
+            {
+                l.AddThemeColorOverride("font_color", HINT_TEXT);
+                _panel.AddChild(l);
+            });
         }
-        .Apply(l => _panel.AddChild(l));
-
-        // Opacity slider
-        var slider = new HSlider
+        catch (Exception ex)
         {
-            Position = new Vector2I(70, y),
-            Size = new Vector2I(140, 22),
-            MinValue = MIN_OPACITY,
-            MaxValue = MAX_OPACITY,
-            Step = OPACITY_STEP,
-            Value = DEFAULT_OPACITY
-        };
-        slider.ValueChanged += (v) =>
-        {
-            var s = _panel.GetThemeStylebox("panel") as StyleBoxFlat;
-            if (s != null)
-                s.BgColor = new Godot.Color(0.08f, 0.08f, 0.12f, (float)v);
-        };
-        _panel.AddChild(slider);
-
-        // Help text
-        new Godot.Label
-        {
-            Text = "拖拽 | 调整 | CE | ♥收藏 | −删除 | ▶打开",
-            Position = new Vector2I(220, y),
-            Size = new Vector2I(310, 22)
+            Log.Warn($"{LOG_PREFIX} CreateOpacityControl error: {ex.Message}");
         }
-        .Apply(l =>
-        {
-            l.AddThemeColorOverride("font_color", HINT_TEXT);
-            _panel.AddChild(l);
-        });
     }
 
     /// <summary>Create resize handle</summary>
     private static void CreateResizeHandle()
     {
-        new ColorRect
+        if (_panel == null) return;
+        
+        try
         {
-            Name = "ResizeHandle",
-            Color = RESIZE_HANDLE_COLOR,
-            Size = new Vector2I(RESIZE_HANDLE_SIZE, RESIZE_HANDLE_SIZE),
-            MouseFilter = Godot.Control.MouseFilterEnum.Stop
+            new ColorRect
+            {
+                Name = "ResizeHandle",
+                Color = RESIZE_HANDLE_COLOR,
+                Size = new Vector2I(RESIZE_HANDLE_SIZE, RESIZE_HANDLE_SIZE),
+                Position = new Vector2I(PANEL_WIDTH - RESIZE_HANDLE_SIZE, PANEL_HEIGHT - RESIZE_HANDLE_SIZE),
+                MouseFilter = Godot.Control.MouseFilterEnum.Stop
+            }
+            .Apply(r =>
+            {
+                r.GuiInput += OnResizeInput;
+                _panel.AddChild(r);
+            });
         }
-        .Apply(r =>
+        catch (Exception ex)
         {
-            r.GuiInput += OnResizeInput;
-            _panel.AddChild(r);
-        });
+            Log.Warn($"{LOG_PREFIX} CreateResizeHandle error: {ex.Message}");
+        }
     }
 
     /// <summary>Refresh favorites list display</summary>
     private static void RefreshFavList()
     {
-        if (_favList == null)
-            return;
-
-        _favList.Clear();
-        foreach (var url in _favorites)
+        try
         {
-            string displayName = ExtractDomainName(url);
-            _favList.AddItem($"{displayName}  ({url})");
+            if (_favList == null)
+                return;
+
+            _favList.Clear();
+            foreach (var url in _favorites)
+            {
+                string displayName = ExtractDomainName(url);
+                _favList.AddItem($"{displayName}  ({url})");
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"{LOG_PREFIX} RefreshFavList error: {ex.Message}");
         }
     }
 
@@ -526,115 +780,284 @@ public static class Entry
 
     private static void OnToggleClick()
     {
-        _panelVisible = !_panelVisible;
-        _panel.Visible = _panelVisible;
-        if (_panelVisible && _urlInput != null)
-            _urlInput.Text = _lastUrl;
+        try
+        {
+            _panelVisible = !_panelVisible;
+            if (_panel != null)
+                _panel.Visible = _panelVisible;
+            if (_panelVisible && _urlInput != null)
+                _urlInput.Text = _lastUrl;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"{LOG_PREFIX} OnToggleClick error: {ex.Message}");
+        }
     }
 
     private static void OnCloseClick()
     {
-        _panelVisible = false;
-        _panel.Visible = false;
+        try
+        {
+            _panelVisible = false;
+            if (_panel != null)
+                _panel.Visible = false;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"{LOG_PREFIX} OnCloseClick error: {ex.Message}");
+        }
     }
 
     private static void OnGoClick()
     {
-        var url = _urlInput.Text.Trim();
-        if (string.IsNullOrEmpty(url))
-            url = "https://www.bilibili.com";
-        if (!url.StartsWith("http"))
-            url = "https://" + url;
-        OpenUrl(url);
+        try
+        {
+            var url = _urlInput?.Text.Trim() ?? "";
+            if (string.IsNullOrEmpty(url))
+                url = "https://www.bilibili.com";
+            if (!url.StartsWith("http"))
+                url = "https://" + url;
+            OpenUrl(url);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"{LOG_PREFIX} OnGoClick error: {ex.Message}");
+        }
     }
 
     private static void OnAddFavoriteClick()
     {
-        var url = _urlInput.Text.Trim();
-        if (!string.IsNullOrEmpty(url) && !_favorites.Contains(url))
+        try
         {
-            _favorites.Add(url);
-            SaveFavorites();
-            RefreshFavList();
+            var url = _urlInput?.Text.Trim() ?? "";
+            if (!string.IsNullOrEmpty(url) && !_favorites.Contains(url))
+            {
+                _favorites.Add(url);
+                SaveFavorites();
+                RefreshFavList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"{LOG_PREFIX} OnAddFavoriteClick error: {ex.Message}");
         }
     }
 
     private static void OnRemoveFavoriteClick()
     {
-        var sel = _favList.GetSelectedItems();
-        if (sel.Length > 0 && sel[0] >= 0 && sel[0] < _favorites.Count)
+        try
         {
-            _favorites.RemoveAt(sel[0]);
-            SaveFavorites();
-            RefreshFavList();
+            var sel = _favList?.GetSelectedItems() ?? Array.Empty<int>();
+            if (sel.Length > 0 && sel[0] >= 0 && sel[0] < _favorites.Count)
+            {
+                _favorites.RemoveAt(sel[0]);
+                SaveFavorites();
+                RefreshFavList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"{LOG_PREFIX} OnRemoveFavoriteClick error: {ex.Message}");
         }
     }
 
     private static void OnOpenFavoriteClick()
     {
-        var sel = _favList.GetSelectedItems();
-        if (sel.Length > 0 && sel[0] >= 0 && sel[0] < _favorites.Count)
-            OpenUrl(_favorites[sel[0]]);
+        try
+        {
+            var sel = _favList?.GetSelectedItems() ?? Array.Empty<int>();
+            if (sel.Length > 0 && sel[0] >= 0 && sel[0] < _favorites.Count)
+                OpenUrl(_favorites[sel[0]]);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"{LOG_PREFIX} OnOpenFavoriteClick error: {ex.Message}");
+        }
     }
 
     private static void OnTitleInput(InputEvent e)
     {
-        if (e is InputEventMouseButton mb)
+        try
         {
-            if (mb.ButtonIndex == MouseButton.Left)
+            if (e is InputEventMouseButton mb)
             {
-                _dragging = mb.Pressed;
-                if (_dragging)
-                    _dragOffset = _titleBg.GetGlobalMousePosition() - _panel.Position.AsVector2();
+                if (mb.ButtonIndex == MouseButton.Left)
+                {
+                    _dragging = mb.Pressed;
+                    if (_dragging && _titleBg != null && _panel != null)
+                        _dragOffset = _titleBg.GetGlobalMousePosition() - _panel.Position.AsVector2();
+                }
+                return;
             }
-            return;
-        }
 
-        if (_dragging && e is InputEventMouseMotion)
-            _panel.Position = (_titleBg.GetGlobalMousePosition() - _dragOffset).AsVector2I();
+            if (_dragging && e is InputEventMouseMotion && _titleBg != null && _panel != null)
+                _panel.Position = (_titleBg.GetGlobalMousePosition() - _dragOffset).AsVector2I();
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"{LOG_PREFIX} OnTitleInput error: {ex.Message}");
+        }
     }
 
     private static void OnResizeInput(InputEvent e)
     {
-        if (e is InputEventMouseButton mb)
+        try
         {
-            if (mb.ButtonIndex == MouseButton.Left)
+            if (e is InputEventMouseButton mb)
             {
-                _resizing = mb.Pressed;
-                if (_resizing)
+                if (mb.ButtonIndex == MouseButton.Left)
                 {
-                    _resizeStartPos = _titleBg.GetGlobalMousePosition();
-                    _resizeStartSize = _panel.Size.AsVector2();
+                    _resizing = mb.Pressed;
+                    if (_resizing && _titleBg != null && _panel != null)
+                    {
+                        _resizeStartPos = _titleBg.GetGlobalMousePosition();
+                        _resizeStartSize = _panel.Size.AsVector2();
+                    }
                 }
+                return;
             }
-            return;
-        }
 
-        if (_resizing && e is InputEventMouseMotion)
+            if (_resizing && e is InputEventMouseMotion && _titleBg != null && _panel != null)
+            {
+                var delta = _titleBg.GetGlobalMousePosition() - _resizeStartPos;
+                int newWidth = (int)Mathf.Max(_resizeStartSize.X + delta.X, MIN_PANEL_WIDTH);
+                int newHeight = (int)Mathf.Max(_resizeStartSize.Y + delta.Y, MIN_PANEL_HEIGHT);
+                _panel.Size = new Vector2I(newWidth, newHeight);
+            }
+        }
+        catch (Exception ex)
         {
-            var delta = _titleBg.GetGlobalMousePosition() - _resizeStartPos;
-            int newWidth = (int)Mathf.Max(_resizeStartSize.X + delta.X, MIN_PANEL_WIDTH);
-            int newHeight = (int)Mathf.Max(_resizeStartSize.Y + delta.Y, MIN_PANEL_HEIGHT);
-            _panel.Size = new Vector2I(newWidth, newHeight);
+            Log.Warn($"{LOG_PREFIX} OnResizeInput error: {ex.Message}");
         }
     }
 
     #endregion
 
-    /// <summary>Open URL in system browser</summary>
+    /// <summary>Open URL in system browser with cross-platform support</summary>
     private static void OpenUrl(string url)
     {
-        _lastUrl = url;
-        if (_urlInput != null)
-            _urlInput.Text = url;
+        try
+        {
+            _lastUrl = url;
+            if (_urlInput != null)
+                _urlInput.Text = url;
 
+            Log.Info($"{LOG_PREFIX} Opening URL: {url}");
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                OpenUrlWindows(url);
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                OpenUrlLinux(url);
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                OpenUrlMacOS(url);
+            }
+            else
+            {
+                // Fallback for unknown platforms
+                OpenUrlFallback(url);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"{LOG_PREFIX} Failed to open URL: {url} - {ex.Message}");
+            Log.Warn($"{LOG_PREFIX} Stack trace: {ex.StackTrace}");
+        }
+    }
+
+    /// <summary>Open URL on Windows</summary>
+    private static void OpenUrlWindows(string url)
+    {
         try
         {
             Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
         }
         catch (Exception ex)
         {
-            Log.Warn($"{LOG_PREFIX} Failed to open URL: {url} - {ex.Message}");
+            Log.Warn($"{LOG_PREFIX} Windows URL open failed, trying fallback: {ex.Message}");
+            OpenUrlFallback(url);
+        }
+    }
+
+    /// <summary>Open URL on Linux</summary>
+    private static void OpenUrlLinux(string url)
+    {
+        try
+        {
+            // Try xdg-open first (common on most distros)
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "xdg-open",
+                Arguments = url,
+                UseShellExecute = false
+            });
+        }
+        catch
+        {
+            try
+            {
+                // Try gnome-open
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "gnome-open",
+                    Arguments = url,
+                    UseShellExecute = false
+                });
+            }
+            catch
+            {
+                try
+                {
+                    // Try kde-open
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = "kde-open",
+                        Arguments = url,
+                        UseShellExecute = false
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Log.Warn($"{LOG_PREFIX} Linux URL open failed, trying fallback: {ex.Message}");
+                    OpenUrlFallback(url);
+                }
+            }
+        }
+    }
+
+    /// <summary>Open URL on macOS</summary>
+    private static void OpenUrlMacOS(string url)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "open",
+                Arguments = url,
+                UseShellExecute = false
+            });
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"{LOG_PREFIX} macOS URL open failed, trying fallback: {ex.Message}");
+            OpenUrlFallback(url);
+        }
+    }
+
+    /// <summary>Fallback URL opening method</summary>
+    private static void OpenUrlFallback(string url)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"{LOG_PREFIX} All URL opening methods failed: {ex.Message}");
         }
     }
 }
@@ -654,9 +1077,71 @@ public static class SbfExt
 {
     public static void SetCornerRadiusAll(this StyleBoxFlat styleBox, int radius)
     {
-        styleBox.CornerRadiusTopLeft = radius;
-        styleBox.CornerRadiusTopRight = radius;
-        styleBox.CornerRadiusBottomLeft = radius;
-        styleBox.CornerRadiusBottomRight = radius;
+        try
+        {
+            styleBox.CornerRadiusTopLeft = radius;
+            styleBox.CornerRadiusTopRight = radius;
+            styleBox.CornerRadiusBottomLeft = radius;
+            styleBox.CornerRadiusBottomRight = radius;
+        }
+        catch (Exception ex)
+        {
+            // Fallback for older Godot versions that might not support all properties
+            Log.Warn($"{LOG_PREFIX} SetCornerRadiusAll fallback: {ex.Message}");
+            try
+            {
+                styleBox.CornerRadiusTopLeft = radius;
+                styleBox.CornerRadiusTopRight = radius;
+            }
+            catch { }
+        }
+    }
+}
+
+/// <summary>Logging helper (compatibility layer)</summary>
+internal static class Log
+{
+    private static bool? _isMegaCritLoggingAvailable = null;
+    
+    public static void Info(string message)
+    {
+        TryLog(message, "Info", () => MegaCrit.Sts2.Core.Logging.Log.Info(message));
+    }
+    
+    public static void Warn(string message)
+    {
+        TryLog(message, "Warn", () => MegaCrit.Sts2.Core.Logging.Log.Warn(message));
+    }
+    
+    public static void Error(string message)
+    {
+        TryLog(message, "Error", () => MegaCrit.Sts2.Core.Logging.Log.Error(message));
+    }
+    
+    private static void TryLog(string message, string level, Action megaCritLogAction)
+    {
+        try
+        {
+            if (!_isMegaCritLoggingAvailable.HasValue)
+            {
+                // Check if MegaCrit logging is available
+                megaCritLogAction();
+                _isMegaCritLoggingAvailable = true;
+            }
+            else if (_isMegaCritLoggingAvailable.Value)
+            {
+                megaCritLogAction();
+            }
+            else
+            {
+                Console.WriteLine($"[{level}] {message}");
+            }
+        }
+        catch
+        {
+            _isMegaCritLoggingAvailable = false;
+            // Fallback to console
+            Console.WriteLine($"[{level}] {message}");
+        }
     }
 }
