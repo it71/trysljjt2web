@@ -79,6 +79,12 @@ public static class Entry
     private static bool _resizing = false;
     private static bool _compactView = false;
     
+    // Floating icon mode
+    private static bool _isMinimized = false;
+    private static bool _iconDragging = false;
+    private static Button? _floatingIconBtn;
+    private static Vector2 _iconDragOffset;
+    
     private static Vector2 _dragOffset;
     private static Vector2 _resizeStartPos;
     private static Vector2 _resizeStartSize;
@@ -304,6 +310,9 @@ public static class Entry
                 _mainPanel.Resized += OnPanelResized;
                 OnPanelResized(); // Initial positioning
             }
+            
+            // Floating icon (initially hidden)
+            CreateFloatingIcon();
         }
         catch (Exception ex)
         {
@@ -391,7 +400,7 @@ public static class Entry
             // Title label
             new Godot.Label
             {
-                Text = "  🚀 CE Built-in Browser",
+                Text = "  🎮 STS2 Web Browser",
                 Position = new Vector2I(4, 0),
                 Size = new Vector2I(300, TITLE_HEIGHT)
             }
@@ -405,7 +414,7 @@ public static class Entry
             _toggleViewBtn = new Godot.Button
             {
                 Text = "📑",
-                Position = new Vector2I(MAIN_PANEL_WIDTH - 120, 2),
+                Position = new Vector2I(MAIN_PANEL_WIDTH - 152, 2),
                 Size = new Vector2I(28, 28),
                 Flat = true,
                 TooltipText = "Toggle Favorites Panel"
@@ -417,13 +426,25 @@ public static class Entry
             _externalBtn = new Godot.Button
             {
                 Text = "🔗",
-                Position = new Vector2I(MAIN_PANEL_WIDTH - 88, 2),
+                Position = new Vector2I(MAIN_PANEL_WIDTH - 120, 2),
                 Size = new Vector2I(28, 28),
                 Flat = true,
                 TooltipText = "Open in External Browser"
             };
             _externalBtn.Pressed += OnOpenExternalClick;
             _mainPanel.AddChild(_externalBtn);
+
+            // Minimize button (new!)
+            var minimizeBtn = new Godot.Button
+            {
+                Text = "—",
+                Position = new Vector2I(MAIN_PANEL_WIDTH - 88, 2),
+                Size = new Vector2I(28, 28),
+                Flat = true,
+                TooltipText = "Minimize to Floating Icon"
+            };
+            minimizeBtn.Pressed += OnMinimizeClick;
+            _mainPanel.AddChild(minimizeBtn);
 
             // Close button
             new Godot.Button
@@ -594,7 +615,7 @@ public static class Entry
             // Status/Info label
             _statusLabel = new Label
             {
-                Text = "💡 Click \"🔗\" to open in external browser\n\nFor built-in web rendering, Godot 4's WebView would be used.\nThis mod provides the complete browser UI framework.",
+                Text = "🎮 Welcome to STS2 Web Browser!\n\n⌛ Perfect for waiting teammates taking their time...\n\n💡 Quick Start:\n   1. Click \"🔗\" to open in external browser\n   2. When it's your turn, click \"—\" to minimize to icon\n   3. Click 🎮 icon to come back later!\n\n📺 Recommended sites below 👇",
                 Position = new Vector2I(20, 20),
                 Size = new Vector2I(contentWidth - 40, 200),
                 HorizontalAlignment = HorizontalAlignment.Center,
@@ -1407,6 +1428,147 @@ public static class SbfExt
             catch { }
         }
     }
+    
+    #region Floating Icon Mode
+    
+    /// <summary>Create floating icon button</summary>
+    private static void CreateFloatingIcon()
+    {
+        if (_canvas == null) return;
+        
+        try
+        {
+            _floatingIconBtn = new Godot.Button
+            {
+                Text = "🎮",
+                Position = new Vector2I(50, 50),
+                Size = new Vector2I(50, 50),
+                Flat = false,
+                TooltipText = "Click to restore browser\nDrag to move",
+                Visible = false // Initially hidden
+            };
+            
+            // Style the icon
+            var styleBox = new StyleBoxFlat
+            {
+                BgColor = new Godot.Color(0.12f, 0.12f, 0.2f, 0.95f),
+                CornerRadiusTopLeft = 12,
+                CornerRadiusTopRight = 12,
+                CornerRadiusBottomLeft = 12,
+                CornerRadiusBottomRight = 12,
+                BorderColor = new Godot.Color(0.3f, 0.5f, 1f, 1f),
+                BorderWidthLeft = 2,
+                BorderWidthRight = 2,
+                BorderWidthTop = 2,
+                BorderWidthBottom = 2
+            };
+            _floatingIconBtn.AddThemeStyleboxOverride("normal", styleBox);
+            _floatingIconBtn.AddThemeStyleboxOverride("hover", styleBox);
+            _floatingIconBtn.AddThemeStyleboxOverride("pressed", styleBox);
+            
+            // Connect events
+            _floatingIconBtn.Pressed += OnFloatingIconClick;
+            _floatingIconBtn.GuiInput += OnFloatingIconInput;
+            
+            _canvas.AddChild(_floatingIconBtn);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"{LOG_PREFIX} CreateFloatingIcon error: {ex.Message}");
+        }
+    }
+    
+    /// <summary>Minimize button click handler</summary>
+    private static void OnMinimizeClick()
+    {
+        try
+        {
+            _isMinimized = true;
+            
+            // Hide main panel
+            if (_mainPanel != null)
+                _mainPanel.Visible = false;
+            
+            // Show floating icon
+            if (_floatingIconBtn != null)
+            {
+                // Position icon near where main panel was
+                if (_mainPanel != null)
+                {
+                    _floatingIconBtn.Position = new Vector2I(
+                        _mainPanel.Position.X + 10,
+                        _mainPanel.Position.Y + 10
+                    );
+                }
+                _floatingIconBtn.Visible = true;
+            }
+            
+            Log.Info($"{LOG_PREFIX} Minimized to floating icon");
+            
+            // Show a reminder
+            UpdateStatus("💡 Browser minimized to floating icon! Click 🎮 to restore.\n\n⏰ Remember to pause video if you opened one!");
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"{LOG_PREFIX} OnMinimizeClick error: {ex.Message}");
+        }
+    }
+    
+    /// <summary>Floating icon click handler - restore browser</summary>
+    private static void OnFloatingIconClick()
+    {
+        try
+        {
+            _isMinimized = false;
+            
+            // Hide floating icon
+            if (_floatingIconBtn != null)
+                _floatingIconBtn.Visible = false;
+            
+            // Show main panel
+            if (_mainPanel != null)
+                _mainPanel.Visible = _panelVisible;
+            
+            Log.Info($"{LOG_PREFIX} Restored from floating icon");
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"{LOG_PREFIX} OnFloatingIconClick error: {ex.Message}");
+        }
+    }
+    
+    /// <summary>Floating icon input handler - for dragging</summary>
+    private static void OnFloatingIconInput(InputEvent e)
+    {
+        if (_floatingIconBtn == null) return;
+        
+        try
+        {
+            if (e is InputEventMouseButton mb)
+            {
+                if (mb.ButtonIndex == MouseButton.Left && mb.Pressed)
+                {
+                    _iconDragging = true;
+                    _iconDragOffset = _floatingIconBtn.GetGlobalMousePosition() - _floatingIconBtn.Position.AsVector2();
+                }
+                else if (mb.ButtonIndex == MouseButton.Left && !mb.Pressed)
+                {
+                    _iconDragging = false;
+                }
+            }
+            
+            if (_iconDragging && e is InputEventMouseMotion mm)
+            {
+                var newPos = (_floatingIconBtn.GetGlobalMousePosition() - _iconDragOffset).AsVector2I();
+                _floatingIconBtn.Position = newPos;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"{LOG_PREFIX} OnFloatingIconInput error: {ex.Message}");
+        }
+    }
+    #endregion
 }
 
 /// <summary>Logging helper (compatibility layer)</summary>
