@@ -6,6 +6,8 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <AssemblyName>STS2WebBrowser</AssemblyName>
+    <RootNamespace>STS2WebBrowser</RootNamespace>
     <Sts2Dir Condition="'$(Sts2Dir)' == ''">$(MSBuildProjectDirectory)</Sts2Dir>
     <IsWindows Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::Windows)))' == 'true'">true</IsWindows>
     <IsLinux Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::Linux)))' == 'true'">true</IsLinux>

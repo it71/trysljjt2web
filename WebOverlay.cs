@@ -7,16 +7,16 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 
 /// <summary>
-/// WebOverlay - Floating Browser Mod for Slay the Spire 2
+/// STS2WebBrowser - In-Game Browser for Slay the Spire 2
 /// Built-in browser with favorites management and cross-platform support
 /// </summary>
 [ModInitializer(nameof(Init))]
 public static class Entry
 {
     #region UI Constants
-    private const string MOD_ID = "com.tiezhu.weboverlay";
-    private const string CONFIG_PATH = "user://weboverlay.cfg";
-    private const string LOG_PREFIX = "[WebOverlay]";
+    private const string MOD_ID = "com.sts2webbrowser";
+    private const string CONFIG_PATH = "user://sts2webbrowser.cfg";
+    private const string LOG_PREFIX = "[STS2WebBrowser]";
     
     private const int CANVAS_LAYER = 128;
     private const int MAIN_PANEL_WIDTH = 1100;
@@ -271,7 +271,7 @@ public static class Entry
     {
         _canvas = new CanvasLayer
         {
-            Name = "WebOverlayCanvas",
+            Name = "STS2WebBrowserCanvas",
             Layer = CANVAS_LAYER
         };
 

@@ -1,4 +1,4 @@
-# CE Web Browser - 编译与发布指南
+# STS2 Web Browser - 编译与发布指南
 
 📦 完整的编译、打包和发布说明
 
@@ -8,7 +8,7 @@
 
 ✅ **本mod不需要其他mod支持！**
 
-`WebOverlay.json` 中 `"dependencies": []` 是空的，只需游戏自带的三个 DLL 文件即可正常工作。
+`STS2WebBrowser.json` 中 `"dependencies": []` 是空的，只需游戏自带的三个 DLL 文件即可正常工作。
 
 ---
 
@@ -64,7 +64,7 @@ C:\Program Files (x86)\Steam\steamapps\common\SlayTheSpire2\
 
 #### 步骤 3：编辑项目文件（可选）
 
-如果你把 mod 放在游戏目录外，编辑 `WebOverlay.csproj`，修改这一行：
+如果你把 mod 放在游戏目录外，编辑 `STS2WebBrowser.csproj`，修改这一行：
 ```xml
 <Sts2Dir Condition="'$(Sts2Dir)' == ''">你的游戏完整路径</Sts2Dir>
 ```
@@ -79,14 +79,14 @@ C:\Program Files (x86)\Steam\steamapps\common\SlayTheSpire2\
 在 mod 目录下打开终端，运行：
 
 ```bash
-dotnet build WebOverlay.csproj --configuration Release
+dotnet build STS2WebBrowser.csproj --configuration Release
 ```
 
 #### 步骤 5：找到编译好的 DLL
 
 编译成功后，DLL 文件位于：
 ```
-bin/Release/net8.0/WebOverlay.dll
+bin/Release/net8.0/STS2WebBrowser.dll
 ```
 
 ---
@@ -96,17 +96,17 @@ bin/Release/net8.0/WebOverlay.dll
 你也可以在编译时直接指定游戏路径：
 
 ```bash
-dotnet build WebOverlay.csproj --configuration Release -p:Sts2Dir="你的游戏完整路径"
+dotnet build STS2WebBrowser.csproj --configuration Release -p:Sts2Dir="你的游戏完整路径"
 ```
 
 **Windows 示例：**
 ```bash
-dotnet build WebOverlay.csproj --configuration Release -p:Sts2Dir="C:\Program Files (x86)\Steam\steamapps\common\SlayTheSpire2"
+dotnet build STS2WebBrowser.csproj --configuration Release -p:Sts2Dir="C:\Program Files (x86)\Steam\steamapps\common\SlayTheSpire2"
 ```
 
 **Linux 示例：**
 ```bash
-dotnet build WebOverlay.csproj --configuration Release -p:Sts2Dir="$HOME/.steam/steam/steamapps/common/SlayTheSpire2"
+dotnet build STS2WebBrowser.csproj --configuration Release -p:Sts2Dir="$HOME/.steam/steam/steamapps/common/SlayTheSpire2"
 ```
 
 ---
@@ -116,9 +116,9 @@ dotnet build WebOverlay.csproj --configuration Release -p:Sts2Dir="$HOME/.steam/
 ### 完整发布包结构
 
 ```
-WebOverlay/
-├── WebOverlay.dll          # 编译后的插件
-├── WebOverlay.json         # 插件配置
+STS2WebBrowser/
+├── STS2WebBrowser.dll          # 编译后的插件
+├── STS2WebBrowser.json         # 插件配置
 ├── README.md               # 说明文档
 └── TUTORIAL.md             # 使用教程
 ```
@@ -127,31 +127,31 @@ WebOverlay/
 
 #### 1. 创建发布目录
 ```bash
-mkdir WebOverlay-Release
+mkdir STS2WebBrowser-Release
 ```
 
 #### 2. 复制必要文件
 ```bash
 # 复制编译好的 DLL
-cp bin/Release/net8.0/WebOverlay.dll WebOverlay-Release/
+cp bin/Release/net8.0/STS2WebBrowser.dll STS2WebBrowser-Release/
 
 # 复制配置和文档
-cp WebOverlay.json WebOverlay-Release/
-cp README.md WebOverlay-Release/
-cp TUTORIAL.md WebOverlay-Release/
+cp STS2WebBrowser.json STS2WebBrowser-Release/
+cp README.md STS2WebBrowser-Release/
+cp TUTORIAL.md STS2WebBrowser-Release/
 ```
 
 #### 3. 打包为 ZIP（可选，用于发布）
 
 **Windows (PowerShell):**
 ```powershell
-Compress-Archive -Path WebOverlay-Release\* -DestinationPath WebOverlay-v5.0.0.zip
+Compress-Archive -Path STS2WebBrowser-Release\* -DestinationPath STS2WebBrowser-v5.0.0.zip
 ```
 
 **Linux/macOS:**
 ```bash
-cd WebOverlay-Release
-zip -r ../WebOverlay-v5.0.0.zip .
+cd STS2WebBrowser-Release
+zip -r ../STS2WebBrowser-v5.0.0.zip .
 ```
 
 ---
@@ -161,22 +161,22 @@ zip -r ../WebOverlay-v5.0.0.zip .
 ### 方法一：直接复制（推荐）
 
 1. 编译完成后，将以下文件复制到游戏的 `mods` 文件夹：
-   - `WebOverlay.dll`
-   - `WebOverlay.json`
+   - `STS2WebBrowser.dll`
+   - `STS2WebBrowser.json`
 
 2. 最终结构应该是：
 ```
 SlayTheSpire2/
 └── mods/
-    └── WebOverlay/
-        ├── WebOverlay.dll
-        └── WebOverlay.json
+    └── STS2WebBrowser/
+        ├── STS2WebBrowser.dll
+        └── STS2WebBrowser.json
 ```
 
 ### 方法二：使用完整发布包
 
-1. 解压 `WebOverlay-v5.0.0.zip`
-2. 将整个 `WebOverlay` 文件夹复制到游戏的 `mods` 目录
+1. 解压 `STS2WebBrowser-v5.0.0.zip`
+2. 将整个 `STS2WebBrowser` 文件夹复制到游戏的 `mods` 目录
 
 ---
 
@@ -184,7 +184,7 @@ SlayTheSpire2/
 
 1. 启动 Slay the Spire 2
 2. 在主菜单进入「模组」或「Mods」菜单
-3. 找到「CE Web Browser」并启用
+3. 找到「STS2 Web Browser」并启用
 4. 重启游戏
 5. 测试打开浏览器面板
 
@@ -200,13 +200,13 @@ SlayTheSpire2/
 
 ### Q: 编译时提示缺少 GodotSharp.dll？
 **A:**
-- 检查 `WebOverlay.csproj` 中的引用路径
+- 检查 `STS2WebBrowser.csproj` 中的引用路径
 - 确认游戏目录结构正确
 - 确保使用的是 Release 配置编译
 
 ### Q: 编译成功但游戏无法加载？
 **A:**
-- 检查 `WebOverlay.json` 中的版本号和依赖
+- 检查 `STS2WebBrowser.json` 中的版本号和依赖
 - 确认 DLL 文件名正确
 - 查看游戏日志了解详细错误
 
@@ -227,16 +227,16 @@ dotnet build --configuration Release
 
 ### 发布准备
 1. 确保所有代码已提交并推送到 main 分支
-2. 更新 `WebOverlay.json` 中的版本号
+2. 更新 `STS2WebBrowser.json` 中的版本号
 3. 创建发布包 ZIP 文件
 
 ### 在 GitHub 上创建 Release
 1. 访问 https://github.com/it71/trysljjt2web/releases
 2. 点击「Draft a new release」
 3. 填写版本标签：`v5.0.0`
-4. 填写发布标题：`CE Web Browser v5.0.0`
+4. 填写发布标题：`STS2 Web Browser v5.0.0`
 5. 在描述中列出主要更新内容
-6. 上传 `WebOverlay-v5.0.0.zip` 文件
+6. 上传 `STS2WebBrowser-v5.0.0.zip` 文件
 7. 点击「Publish release」
 
 ---
